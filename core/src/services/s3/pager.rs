@@ -41,6 +41,8 @@ pub struct S3Pager {
 
     token: String,
     done: bool,
+
+    runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl S3Pager {
@@ -61,7 +63,13 @@ impl S3Pager {
 
             token: "".to_string(),
             done: false,
+
+            runtime: None,
         }
+    }
+
+    pub fn set_runtime(&mut self, runtime: Arc<tokio::runtime::Runtime>) {
+        self.runtime = Some(runtime);
     }
 }
 
@@ -140,6 +148,15 @@ impl oio::Page for S3Pager {
         }
 
         Ok(Some(entries))
+    }
+}
+
+impl oio::BlockingPage for S3Pager {
+    fn next(&mut self) -> Result<Option<Vec<oio::Entry>>> {
+        self.runtime
+            .clone()
+            .unwrap()
+            .block_on(oio::Page::next(self))
     }
 }
 

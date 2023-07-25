@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 
@@ -99,6 +101,7 @@ pub struct MultipartUploadWriter<W: MultipartUploadWrite> {
     parts: Vec<MultipartUploadPart>,
     buffer: oio::VectorCursor,
     buffer_size: usize,
+    runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl<W: MultipartUploadWrite> MultipartUploadWriter<W> {
@@ -112,6 +115,7 @@ impl<W: MultipartUploadWrite> MultipartUploadWriter<W> {
             parts: Vec::new(),
             buffer: oio::VectorCursor::new(),
             buffer_size: DEFAULT_WRITE_MIN_SIZE,
+            runtime: None,
         }
     }
 
@@ -126,6 +130,10 @@ impl<W: MultipartUploadWrite> MultipartUploadWriter<W> {
     pub fn with_write_min_size(mut self, v: usize) -> Self {
         self.buffer_size = v;
         self
+    }
+
+    pub fn set_runtime(&mut self, runtime: Arc<tokio::runtime::Runtime>) {
+        self.runtime = Some(runtime);
     }
 }
 
@@ -261,5 +269,24 @@ where
         };
 
         self.inner.abort_part(upload_id).await
+    }
+}
+
+impl<W> oio::BlockingWrite for MultipartUploadWriter<W>
+where
+    W: MultipartUploadWrite + 'static,
+{
+    fn write(&mut self, bs: Bytes) -> Result<()> {
+        self.runtime
+            .clone()
+            .unwrap()
+            .block_on(oio::Write::write(self, bs))
+    }
+
+    fn close(&mut self) -> Result<()> {
+        self.runtime
+            .clone()
+            .unwrap()
+            .block_on(oio::Write::close(self))
     }
 }

@@ -866,6 +866,11 @@ impl Builder for S3Builder {
             .batch_max_operations
             .unwrap_or(DEFAULT_BATCH_MAX_OPERATIONS);
         debug!("backend build finished");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         Ok(S3Backend {
             core: Arc::new(S3Core {
                 bucket: bucket.to_string(),
@@ -884,6 +889,7 @@ impl Builder for S3Builder {
                 write_min_size,
                 batch_max_operations,
             }),
+            runtime: Arc::new(runtime),
         })
     }
 }
@@ -892,17 +898,18 @@ impl Builder for S3Builder {
 #[derive(Debug, Clone)]
 pub struct S3Backend {
     core: Arc<S3Core>,
+    runtime: Arc<tokio::runtime::Runtime>,
 }
 
 #[async_trait]
 impl Accessor for S3Backend {
     type Reader = IncomingAsyncBody;
-    type BlockingReader = ();
+    type BlockingReader = bytes::buf::Reader<bytes::Bytes>;
     type Writer = oio::MultipartUploadWriter<S3Writer>;
-    type BlockingWriter = ();
+    type BlockingWriter = oio::MultipartUploadWriter<S3Writer>;
     type Appender = ();
     type Pager = S3Pager;
-    type BlockingPager = ();
+    type BlockingPager = S3Pager;
 
     fn info(&self) -> AccessorInfo {
         let mut am = AccessorInfo::default();
@@ -1142,6 +1149,51 @@ impl Accessor for S3Backend {
         } else {
             Err(parse_error(resp).await?)
         }
+    }
+
+    fn blocking_create_dir(&self, path: &str, args: OpCreateDir) -> Result<RpCreateDir> {
+        self.runtime.block_on(self.create_dir(path, args))
+    }
+
+    fn blocking_read(&self, path: &str, args: OpRead) -> Result<(RpRead, Self::BlockingReader)> {
+        self.runtime.block_on(async {
+            let (rp, reader) = self.read(path, args).await?;
+            let body_bytes = reader.bytes().await?;
+
+            Ok((rp, body_bytes.reader()))
+        })
+    }
+
+    fn blocking_write(&self, path: &str, args: OpWrite) -> Result<(RpWrite, Self::BlockingWriter)> {
+        self.runtime.block_on(async {
+            let (rp, mut writer) = self.write(path, args).await?;
+            writer.set_runtime(self.runtime.clone());
+            Ok((rp, writer))
+        })
+    }
+
+    fn blocking_copy(&self, from: &str, to: &str, args: OpCopy) -> Result<RpCopy> {
+        self.runtime.block_on(self.copy(from, to, args))
+    }
+
+    fn blocking_rename(&self, from: &str, to: &str, args: OpRename) -> Result<RpRename> {
+        self.runtime.block_on(self.rename(from, to, args))
+    }
+
+    fn blocking_stat(&self, path: &str, args: OpStat) -> Result<RpStat> {
+        self.runtime.block_on(self.stat(path, args))
+    }
+
+    fn blocking_delete(&self, path: &str, args: OpDelete) -> Result<RpDelete> {
+        self.runtime.block_on(self.delete(path, args))
+    }
+
+    fn blocking_list(&self, path: &str, args: OpList) -> Result<(RpList, Self::BlockingPager)> {
+        self.runtime.block_on(async {
+            let (rp, mut pager) = self.list(path, args).await?;
+            pager.set_runtime(self.runtime.clone());
+            Ok((rp, pager))
+        })
     }
 }
 

@@ -23,7 +23,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use futures::Future;
 use pin_project::pin_project;
 
@@ -325,6 +325,28 @@ impl BlockingRead for () {
             ErrorKind::Unsupported,
             "output reader doesn't support iterating",
         )))
+    }
+}
+
+impl BlockingRead for bytes::buf::Reader<Bytes> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        Ok(io::Read::read(self, buf)
+            .map_err(|e| Error::new(ErrorKind::Unexpected, &e.to_string()))?)
+    }
+
+    fn next(&mut self) -> Option<Result<Bytes>> {
+        let buf = self.get_mut();
+        if buf.has_remaining() {
+            let result = buf.clone();
+            buf.advance(buf.remaining());
+            Some(Ok(result))
+        } else {
+            None
+        }
+    }
+
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64> {
+        panic!("not supported")
     }
 }
 
