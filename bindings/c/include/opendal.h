@@ -634,6 +634,8 @@ struct opendal_result_stat opendal_operator_stat(const struct opendal_operator_p
 struct opendal_result_list opendal_operator_blocking_list(const struct opendal_operator_ptr *ptr,
                                                           const char *path);
 
+void opendal_init_logger(void);
+
 /**
  * \brief Free the heap-allocated operator pointed by opendal_operator_ptr.
  *

@@ -3394,6 +3394,8 @@ version = "0.39.0"
 dependencies = [
  "bytes",
  "cbindgen",
+ "env_logger",
+ "log",
  "opendal",
 ]
 

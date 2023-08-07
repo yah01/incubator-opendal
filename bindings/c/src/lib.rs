@@ -497,3 +497,8 @@ pub unsafe extern "C" fn opendal_operator_blocking_list(
         },
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn opendal_init_logger() {
+    env_logger::init();
+}
