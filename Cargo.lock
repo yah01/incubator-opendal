@@ -3396,7 +3396,9 @@ dependencies = [
  "cbindgen",
  "env_logger",
  "log",
+ "once_cell",
  "opendal",
+ "tokio",
 ]
 
 [[package]]

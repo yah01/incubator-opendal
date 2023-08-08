@@ -36,6 +36,7 @@ use std::str::FromStr;
 use ::opendal as od;
 use result::opendal_result_list;
 use types::opendal_blocking_lister;
+use once_cell::sync::Lazy;
 
 use crate::error::opendal_code;
 use crate::result::opendal_result_is_exist;
@@ -45,6 +46,13 @@ use crate::types::opendal_bytes;
 use crate::types::opendal_metadata;
 use crate::types::opendal_operator_options;
 use crate::types::opendal_operator_ptr;
+
+static RUNTIME: Lazy<tokio::runtime::Runtime> = Lazy::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+});
 
 /// \brief Construct an operator based on `scheme` and `options`
 ///
@@ -109,6 +117,9 @@ pub unsafe extern "C" fn opendal_operator_new(
             map.insert(k.to_string(), v.to_string());
         }
     }
+
+    let handle = tokio::runtime::Handle::try_current().unwrap_or_else(|_| RUNTIME.handle().clone());
+    let _guard = handle.enter();
 
     let op = match od::Operator::via_map(scheme, map) {
         Ok(o) => o.blocking(),

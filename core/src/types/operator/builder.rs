@@ -18,8 +18,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use once_cell::sync::Lazy;
-
 use crate::layers::*;
 use crate::raw::*;
 use crate::*;
@@ -322,13 +320,6 @@ pub struct OperatorBuilder<A: Accessor> {
     accessor: A,
 }
 
-static RUNTIME: Lazy<tokio::runtime::Runtime> = Lazy::new(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-});
-
 impl<A: Accessor> OperatorBuilder<A> {
     /// Create a new operator builder.
     #[allow(clippy::new_ret_no_self)]
@@ -379,10 +370,6 @@ impl<A: Accessor> OperatorBuilder<A> {
     /// Finish the building to construct an Operator.
     pub fn finish(self) -> Operator {
         let ob = self.layer(TypeEraseLayer);
-        let runtime =
-            tokio::runtime::Handle::try_current().unwrap_or_else(|_| RUNTIME.handle().clone());
-        let _guard = runtime.enter();
-
         Operator::from_inner(Arc::new(ob.accessor) as FusedAccessor)
             .layer(BlockingLayer::create().unwrap())
             .layer(LoggingLayer::default())
